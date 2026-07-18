@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: "https://github.com/MaDuzzz/lab_argocd_helm.git"
     targetRevision: SIT
-    path: bootstrap/apps
+    path: apps
     directory:
       recurse: true
   destination:
