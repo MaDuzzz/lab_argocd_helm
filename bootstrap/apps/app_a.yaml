@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sit-app-service-a
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: "https://github.com/MaDuzzz/lab_argocd_helm.git"
+    targetRevision: SIT
+    path: apps/app_a
+  destination:
+    server: "https://default.svc"
+    namespace: app-sit
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
