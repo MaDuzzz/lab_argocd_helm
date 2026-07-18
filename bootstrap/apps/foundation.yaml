@@ -10,7 +10,7 @@ spec:
     targetRevision: SIT
     path: apps/foundation
   destination:
-    server: "https://default.svc"
+    server: "https://kubernetes.default.svc"
     namespace: app-sit
   syncPolicy:
     automated:
