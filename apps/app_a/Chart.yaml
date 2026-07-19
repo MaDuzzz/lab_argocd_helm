@@ -1,8 +1,8 @@
 apiVersion: v2
 name: app-service-a
-description: Helm chart cho Service A sử dụng template chung từ Nexus
+description: Helm chart cho Service A sử dụng template chung từ GitHub
 version: 1.0.0
 dependencies:
-  - name: my-app-chart # Tên bộ Helm Chart gốc lưu trên Nexus
-    version: 1.0.0 # Phiên bản Helm Chart trên Nexus bạn muốn dùng
-    repository: http://<IP_HOAC_DOMAIN_NEXUS>:<PORT_NEXUS>/repository/<TEN_HELM_REPO_NEXUS>/
+  - name: my-app-chart # Tên bộ Helm Chart template chung
+    version: 1.0.0 # Phiên bản Helm Chart template
+    repository: git+https://github.com/MaDuzzz/lab_argocd_helm.git@SIT?dir=helm-template/my-app-chart
