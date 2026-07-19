@@ -1,0 +1,271 @@
+# Default values for my-app-chart
+
+# Global settings
+namespace: default
+
+# Image configuration
+image:
+  repository: my-registry/my-app
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Image Pull Secrets - reference to pre-created secrets in the namespace
+# Create secret BEFORE deploying:
+#   kubectl create secret docker-registry nexus-registry-secret \
+#     --docker-server=nexus.example.com:8082 \
+#     --docker-username=deploy-user \
+#     --docker-password=<password> \
+#     --docker-email=devops@example.com
+imagePullSecrets: []
+  # - name: nexus-registry-secret
+
+# Service Account
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Deployment
+deployment:
+  enabled: true
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+# StatefulSet - cho ứng dụng cần: persistent identity, stable hostname, persistent storage
+# (disable deployment nếu enable statefulset)
+statefulSet:
+  enabled: false
+  replicas: 1
+  serviceName: my-app # Headless service name
+  podManagementPolicy: OrderedReady # OrderedReady hoặc Parallel
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0 # Số pod từ cuối sẽ được update trước
+  # Headless service config
+  headlessService:
+    enabled: true # Tự động tạo headless service (clusterIP: None)
+  # Persistent storage cho StatefulSet
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: fast-ssd
+
+# Pod configuration
+pod:
+  annotations: {}
+  labels: {}
+  securityContext:
+    runAsNonRoot: false
+  containers:
+    - name: app
+      ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+      env: []
+        # - name: ENV_VAR
+        #   value: "value"
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 250m
+          memory: 256Mi
+      # Startup Probe - runs at container startup
+      startupProbe:
+        httpGet:
+          path: /health
+          port: http
+        initialDelaySeconds: 0
+        periodSeconds: 10
+        timeoutSeconds: 3
+        failureThreshold: 30 # 30 * 10s = 5 minutes
+      # Liveness Probe - restarts container if unhealthy
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: http
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      # Readiness Probe - removes from service if not ready
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: http
+        initialDelaySeconds: 5
+        periodSeconds: 5
+        timeoutSeconds: 3
+        failureThreshold: 1
+      # Pre-stop hook for graceful shutdown
+      lifecycle:
+        preStop:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - sleep 15
+      volumeMounts: []
+        # - name: config
+        #   mountPath: /etc/config
+
+  # Pod volumes
+  volumes: []
+    # - name: config
+    #   configMap:
+    #     name: app-config
+
+# Service
+service:
+  enabled: true
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+  annotations: {}
+  labels: {}
+
+# Ingress
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/rewrite-target: /
+  hosts:
+    - host: app.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+    # - secretName: app-tls
+    #   hosts:
+    #     - app.example.com
+
+# ConfigMap
+configMap:
+  enabled: false
+  name: app-config
+  # Simple key-value data
+  data: {}
+    # ENV_VAR: "value"
+  # Files - use for config files like nginx.conf, app.yaml, etc.
+  files: {}
+    # nginx.conf: |
+    #   server {
+    #     listen 80;
+    #     server_name _;
+    #     location / {
+    #       proxy_pass http://localhost:8080;
+    #     }
+    #   }
+    # app-config.yaml: |
+    #   app:
+    #     name: my-app
+    #     version: 1.0
+  # Binary data - use for binary files like images, certificates
+  binaryData: {}
+    # icon.png: <base64-encoded-binary-data>
+
+# Secret
+secret:
+  enabled: false
+  name: app-secret
+  type: Opaque
+  data: {}
+    # key: base64_encoded_value
+
+# Persistent Volume Claim
+pvc:
+  enabled: false
+  name: app-pvc
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  storageClass: standard
+  # selector: {}
+
+# Horizontal Pod Autoscaler
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+  # Scaling behavior
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+      selectPolicy: Max # Max, Min, or Disabled
+    scaleDown:
+      stabilizationWindowSeconds: 300 # 5 minutes
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+      selectPolicy: Min # Max, Min, or Disabled
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Pod Topology Spread Constraints - spread pods across nodes/zones
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels: {}
+
+# Affinity rules
+affinity:
+  # Pod Anti-Affinity - avoid scheduling on same node
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - my-app-chart
+          topologyKey: kubernetes.io/hostname
+      - weight: 50
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - my-app-chart
+          topologyKey: topology.kubernetes.io/zone
+
+# Pod Disruption Budget
+pdb:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1

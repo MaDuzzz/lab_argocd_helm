@@ -1,0 +1,23 @@
+{{- if .Values.configMap.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.configMap.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "my-app-chart.labels" . | nindent 4 }}
+data:
+  {{- if .Values.configMap.data }}
+  {{- toYaml .Values.configMap.data | nindent 2 }}
+  {{- end }}
+  {{- if .Values.configMap.files }}
+  {{- range $key, $value := .Values.configMap.files }}
+  {{ $key }}: |
+{{ $value | indent 4 }}
+  {{- end }}
+  {{- end }}
+{{- if .Values.configMap.binaryData }}
+binaryData:
+  {{- toYaml .Values.configMap.binaryData | nindent 2 }}
+{{- end }}
+{{- end }}

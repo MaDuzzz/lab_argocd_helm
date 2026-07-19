@@ -1,0 +1,20 @@
+{{- if .Values.pvc.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.pvc.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "my-app-chart.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.pvc.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.pvc.size }}
+  storageClassName: {{ .Values.pvc.storageClass }}
+  {{- if .Values.pvc.selector }}
+  selector:
+    {{- toYaml .Values.pvc.selector | nindent 4 }}
+  {{- end }}
+{{- end }}

@@ -1,0 +1,31 @@
+{{- if or .Values.service.enabled (and .Values.statefulSet.enabled .Values.statefulSet.headlessService.enabled) -}}
+apiVersion: v1
+kind: Service
+metadata:
+  {{- if .Values.statefulSet.enabled }}
+  name: {{ .Values.statefulSet.serviceName }}
+  {{- else }}
+  name: {{ include "my-app-chart.fullname" . }}
+  {{- end }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "my-app-chart.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.statefulSet.enabled }}
+  clusterIP: None  # Headless service for StatefulSet
+  {{- else }}
+  type: {{ .Values.service.type }}
+  {{- end }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "my-app-chart.selectorLabels" . | nindent 4 }}
+{{- end }}
+

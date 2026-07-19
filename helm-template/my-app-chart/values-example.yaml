@@ -1,0 +1,254 @@
+# Example values for my-app-chart deployment
+# Sử dụng file này làm reference cho cách config đầy đủ
+
+namespace: default
+
+# Image từ Nexus Private Registry
+image:
+  repository: nexus.example.com:8082/my-company/my-app
+  tag: v1.0.0
+  pullPolicy: IfNotPresent
+
+# Reference to pre-created docker registry secret
+# Create secret first: kubectl create secret docker-registry nexus-registry-secret \
+#   --docker-server=nexus.example.com:8082 \
+#   --docker-username=deploy-user \
+#   --docker-password=<password>
+imagePullSecrets:
+  - name: nexus-registry-secret
+
+# Deployment config
+deployment:
+  enabled: true
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+# Pod config
+pod:
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+  labels:
+    environment: production
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+
+  containers:
+    - name: app
+      ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+      env:
+        - name: LOG_LEVEL
+          value: "info"
+        - name: APP_ENV
+          value: "production"
+        - name: CONFIG_PATH
+          value: "/etc/config/app-config.yaml"
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+        requests:
+          cpu: 500m
+          memory: 512Mi
+      startupProbe:
+        httpGet:
+          path: /health
+          port: http
+        initialDelaySeconds: 0
+        periodSeconds: 10
+        timeoutSeconds: 3
+        failureThreshold: 30
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: http
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        timeoutSeconds: 5
+        failureThreshold: 3
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: http
+        initialDelaySeconds: 5
+        periodSeconds: 5
+        timeoutSeconds: 3
+        failureThreshold: 1
+      lifecycle:
+        preStop:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - sleep 15
+      volumeMounts:
+        - name: config
+          mountPath: /etc/config
+
+  volumes:
+    - name: config
+      configMap:
+        name: app-config
+        items:
+          - key: app-config.yaml
+            path: app-config.yaml
+
+# Service config
+service:
+  enabled: true
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+  labels:
+    app: my-app
+
+# Ingress config
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: myapp.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: myapp-tls
+      hosts:
+        - myapp.example.com
+
+# ConfigMap với app config
+configMap:
+  enabled: true
+  name: app-config
+  data:
+    LOG_LEVEL: "info"
+  files:
+    app-config.yaml: |
+      app:
+        name: my-app
+        version: 1.0.0
+        debug: false
+      database:
+        host: postgres.example.com
+        port: 5432
+        name: myapp_db
+      cache:
+        enabled: true
+        ttl: 3600
+
+# Secret cho database credentials
+secret:
+  enabled: true
+  name: app-secrets
+  type: Opaque
+  data:
+    DB_USER: ZGJfdXNlcg== # base64(db_user)
+    DB_PASSWORD: c2VjdXJlX3Bhc3N3b3Jk # base64(secure_password)
+
+# Persistent Volume
+pvc:
+  enabled: false # Enable nếu app cần storage
+  name: app-data
+  accessMode: ReadWriteOnce
+  size: 20Gi
+  storageClass: fast-ssd
+
+# HPA - Auto scaling
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+      selectPolicy: Min
+
+# PDB - Pod Disruption Budget
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# Node selector
+nodeSelector:
+  workload: general
+
+# Pod tolerations
+tolerations:
+  - key: dedicated
+    operator: Equal
+    value: apps
+    effect: NoSchedule
+
+# Topology spread constraints
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels: {}
+
+# Pod Anti-Affinity
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - my-app-chart
+          topologyKey: kubernetes.io/hostname
+      - weight: 50
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - my-app-chart
+          topologyKey: topology.kubernetes.io/zone
+
+# ServiceAccount
+serviceAccount:
+  create: true
+  name: my-app-sa
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/my-app-role
