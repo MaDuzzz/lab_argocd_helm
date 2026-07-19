@@ -1,0 +1,130 @@
+# Nginx deployment values
+namespace: app-sit
+
+# Image - nginx từ Docker Hub
+image:
+  repository: nginx
+  tag: "1.25-alpine" # lightweight image
+  pullPolicy: IfNotPresent
+
+# Deployment
+deployment:
+  enabled: true
+  replicas: 2 # 2 pods ban đầu
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+# Pod configuration
+pod:
+  containers:
+    - name: nginx
+      ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+      resources:
+        limits:
+          cpu: 200m
+          memory: 128Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+      # Startup Probe
+      startupProbe:
+        httpGet:
+          path: /
+          port: http
+        initialDelaySeconds: 0
+        periodSeconds: 5
+        failureThreshold: 10
+      # Liveness Probe
+      livenessProbe:
+        httpGet:
+          path: /
+          port: http
+        initialDelaySeconds: 60
+        periodSeconds: 10
+        timeoutSeconds: 3
+        failureThreshold: 3
+      # Readiness Probe
+      readinessProbe:
+        httpGet:
+          path: /
+          port: http
+        initialDelaySeconds: 60
+        periodSeconds: 5
+        failureThreshold: 1
+      # Graceful shutdown
+      lifecycle:
+        preStop:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - sleep 10
+
+# Service
+service:
+  enabled: true
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+# Ingress - disable vì chỉ test internal service
+ingress:
+  enabled: false
+
+# HPA - Horizontal Pod Autoscaler
+hpa:
+  enabled: true
+  minReplicas: 2 # Min 2 pods
+  maxReplicas: 4 # Max 4 pods
+  targetCPUUtilizationPercentage: 70
+  # Scaling behavior
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100 # Tăng 100% (tối đa 4 pods)
+          periodSeconds: 60
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300 # 5 minutes
+      policies:
+        - type: Percent
+          value: 50 # Giảm 50%
+          periodSeconds: 60
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+      selectPolicy: Min
+
+# PDB - Pod Disruption Budget
+pdb:
+  enabled: true
+  minAvailable: 1 # Luôn keep ít nhất 1 pod healthy
+
+# Pod Anti-Affinity - spread pods across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - my-app-chart
+          topologyKey: kubernetes.io/hostname
+
+# Service Account
+serviceAccount:
+  create: false
