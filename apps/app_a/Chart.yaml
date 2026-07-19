@@ -5,4 +5,4 @@ version: 1.0.0
 dependencies:
   - name: my-app-chart # Tên bộ Helm Chart template chung
     version: 1.0.0 # Phiên bản Helm Chart template
-    repository: git+https://github.com/MaDuzzz/lab_argocd_helm.git@SIT?dir=helm-template/my-app-chart
+    repository: http://dungtranmanh.taila72964.ts.net:9444/repository/helm-template/
